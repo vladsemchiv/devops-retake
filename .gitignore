@@ -60,7 +60,4 @@ actions-runner/.path
 actions-runner/.runner
 actions-runner/.service
 
-# test junk / temp text files if не нужны в репе
-test.txt
-test1
 
