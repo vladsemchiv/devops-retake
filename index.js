@@ -1,5 +1,5 @@
 function greet(name) {
-  return `hii, ${name}!`;
+  return `Привет, ${name}!`;
 }
 
 const userName = "мир";
