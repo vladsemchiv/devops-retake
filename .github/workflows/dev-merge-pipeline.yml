@@ -1,0 +1,116 @@
+name: dev-merge-pipeline
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - dev
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'feature/ticket-')
+    runs-on: [self-hosted, linux, x64]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache Sonar packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: SonarQube scan
+        id: sonar
+        uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.qualitygate.wait=true
+
+      - name: Read latest release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASE_NAME=$(curl -s \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" | jq -r '.name // .tag_name // "релизов нет"')
+          echo "RELEASE_NAME=$RELEASE_NAME" >> "$GITHUB_ENV"
+
+      - name: Build text report
+        if: always()
+        run: |
+          mkdir -p artifacts
+          STATUS="${{ steps.sonar.outcome }}"
+          cat > artifacts/sonar-report.txt <<EOF
+          SonarQube status: ${STATUS}
+          Merged branch: ${{ github.event.pull_request.head.ref }}
+          Base branch: ${{ github.event.pull_request.base.ref }}
+          Current release: ${RELEASE_NAME}
+          Merge time: ${{ github.event.pull_request.merged_at }}
+          Pull request: ${{ github.event.pull_request.html_url }}
+          Repository: ${{ github.server_url }}/${{ github.repository }}
+          EOF
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonar-report
+          path: artifacts/sonar-report.txt
+          retention-days: 7
+
+  notify:
+    needs: analyze
+    if: always() && github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'feature/ticket-')
+    runs-on: [self-hosted, linux, x64]
+
+    steps:
+      - name: Read latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RELEASE_NAME=$(curl -s \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/releases/latest" | jq -r '.name // .tag_name // "релизов нет"')
+          echo "RELEASE_NAME=$RELEASE_NAME" >> "$GITHUB_ENV"
+
+      - name: Send Telegram message
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          STATUS="${{ needs.analyze.result }}"
+          if [ "$STATUS" = "success" ]; then
+            ICON="✅"
+          else
+            ICON="❌"
+          fi
+
+          MSG=$(cat <<EOF
+          <b>${ICON} Merge в dev</b>
+          • Ветка: <code>${{ github.event.pull_request.head.ref }}</code>
+          • Выпуск: <code>${RELEASE_NAME}</code>
+          • Дата и время merge: <code>${{ github.event.pull_request.merged_at }}</code>
+          • <a href="${{ github.event.pull_request.html_url }}">Ссылка на merge</a>
+          • <a href="${{ github.server_url }}/${{ github.repository }}">Ссылка на репозиторий</a>
+          EOF
+          )
+
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d parse_mode="HTML" \
+            --data-urlencode "text=${MSG}"
+
