@@ -1,0 +1,66 @@
+# dependencies
+node_modules/
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# env
+.env
+.env.*
+!.env.example
+
+# build / coverage
+dist/
+build/
+coverage/
+.cache/
+.tmp/
+tmp/
+temp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
+
+# test artifacts
+*.lcov
+.nyc_output/
+
+# local files
+*.pid
+*.seed
+
+# archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# GitHub Actions self-hosted runner
+actions-runner/_diag/
+actions-runner/_work/
+actions-runner/externals/
+actions-runner/bin/
+actions-runner/*.tar.gz
+
+# optional runner runtime files
+actions-runner/.credentials
+actions-runner/.credentials_rsaparams
+actions-runner/.env
+actions-runner/.path
+actions-runner/.runner
+actions-runner/.service
+
+# test junk / temp text files if не нужны в репе
+test.txt
+test1
+
